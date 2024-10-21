@@ -31,10 +31,12 @@ const currentConversationInfo = computed(() => {
   return conversationTags.value;
 });
 
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
 onMounted(async () => {
   try {
     const response = await axios.post(
-      "http://127.0.0.1:8000/api/simulation/recent-conversations"
+      `${apiBaseUrl}/api/simulation/recent-conversations`
     );
     conversations.value = response.data;
   } catch (error) {
@@ -47,14 +49,12 @@ const selectConversation = async (conversationId: string) => {
   isDialoguesLoading.value = true;
   try {
     const [dialoguesResponse, tagsResponse] = await Promise.all([
-      axios.post(
-        "http://127.0.0.1:8000/api/simulation/dialogues-by-conversation",
-        { conversation_id: conversationId }
-      ),
-      axios.post(
-        "http://127.0.0.1:8000/api/simulation/conversation-client-info",
-        { conversation_id: conversationId }
-      ),
+      axios.post(`${apiBaseUrl}/api/simulation/dialogues-by-conversation`, {
+        conversation_id: conversationId,
+      }),
+      axios.post(`${apiBaseUrl}/api/simulation/conversation-client-info`, {
+        conversation_id: conversationId,
+      }),
     ]);
     currentConversation.value = dialoguesResponse.data;
     conversationTags.value = tagsResponse.data;
