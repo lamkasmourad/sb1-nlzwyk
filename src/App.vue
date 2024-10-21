@@ -1,85 +1,91 @@
 <script setup lang="ts">
-import ConversationHistory from './components/ConversationHistory.vue'
-import ConversationView from './components/ConversationView.vue'
-import { ref, onMounted, watchEffect } from 'vue'
-import { io } from 'socket.io-client'
+import ConversationHistory from "./components/ConversationHistory.vue";
+import ConversationView from "./components/ConversationView.vue";
+import { ref, onMounted, computed } from "vue";
+import axios from "axios";
 
 interface Conversation {
   id: string;
   title: string;
-  date: string; // Add this line
+  date: string;
+  audio_path?: string;
+  status?: string;
+  client?: string;
+  ref?: string;
 }
 
 interface Message {
   id: string;
-  role: 'assistant' | 'client';
+  role: "assistant" | "client";
   content: string;
 }
 
-const conversations = ref<Conversation[]>([])
-const currentConversation = ref<Message[]>([])
-const currentConversationId = ref<string | null>(null)
-const socket = io('YOUR_WEBSOCKET_SERVER_URL')
+const conversations = ref<Conversation[]>([]);
+const currentConversation = ref<Message[]>([]);
+const currentConversationId = ref<string | null>(null);
+const isDialoguesLoading = ref(false);
+const conversationTags = ref({});
+const currentAudioSrc = ref<string | undefined>(undefined);
 
-onMounted(() => {
-  // Fetch conversation history
-  // This is a placeholder. In a real application, you would fetch this from your backend
-  conversations.value = [
-    { id: '1', title: 'First Conversation', date: '2023-06-01' },
-    { id: '2', title: 'Second Conversation', date: '2023-06-02' },
-  ]
+const currentConversationInfo = computed(() => {
+  return conversationTags.value;
+});
 
-  // Listen for new messages from the websocket
-  socket.on('new_message', (message: Message) => {
-    if (message.id === currentConversationId.value) {
-      currentConversation.value.push(message)
-    }
-  })
-})
-
-const selectConversation = (conversationId: string) => {
-  currentConversationId.value = conversationId
-  // Fetch conversation messages
-  // This is a placeholder. In a real application, you would fetch this from your backend
-  if (conversationId === '1') {
-    currentConversation.value = [
-      { id: '1', role: 'client', content: 'Hello, how can I help you?' },
-      { id: '2', role: 'assistant', content: 'Hi there! How can I assist you today?' },
-    ]
-  } else if (conversationId === '2') {
-    currentConversation.value = [
-      { id: '1', role: 'client', content: 'I have a question about Vue.js' },
-      { id: '2', role: 'assistant', content: "Sure, I'd be happy to help with Vue.js. What would you like to know?" },
-    ]
+onMounted(async () => {
+  try {
+    const response = await axios.post(
+      "http://127.0.0.1:8000/api/simulation/recent-conversations"
+    );
+    conversations.value = response.data;
+  } catch (error) {
+    console.error("Error fetching conversations:", error);
   }
-}
+});
 
-// Simulate receiving messages (remove this in production)
-watchEffect(() => {
-  if (currentConversationId.value) {
-    const interval = setInterval(() => {
-      const newMessage: Message = {
-        id: Date.now().toString(),
-        role: Math.random() > 0.5 ? 'client' : 'assistant',
-        content: `This is a simulated ${Math.random() > 0.5 ? 'voice' : 'text'} message at ${new Date().toLocaleTimeString()}`
-      }
-      currentConversation.value.push(newMessage)
-    }, 5000)
-
-    return () => clearInterval(interval)
+const selectConversation = async (conversationId: string) => {
+  currentConversationId.value = conversationId;
+  isDialoguesLoading.value = true;
+  try {
+    const [dialoguesResponse, tagsResponse] = await Promise.all([
+      axios.post(
+        "http://127.0.0.1:8000/api/simulation/dialogues-by-conversation",
+        { conversation_id: conversationId }
+      ),
+      axios.post(
+        "http://127.0.0.1:8000/api/simulation/conversation-client-info",
+        { conversation_id: conversationId }
+      ),
+    ]);
+    currentConversation.value = dialoguesResponse.data;
+    conversationTags.value = tagsResponse.data;
+    const selectedConversation = conversations.value.find(
+      (conv) => conv.id === conversationId
+    );
+    currentAudioSrc.value = selectedConversation?.audio_path;
+  } catch (error) {
+    console.error("Error fetching data:", error);
+    currentConversation.value = [];
+    conversationTags.value = {};
+    currentAudioSrc.value = undefined;
+  } finally {
+    isDialoguesLoading.value = false;
   }
-})
+};
 </script>
 
 <template>
   <div class="chat-app">
-    <ConversationHistory 
+    <ConversationHistory
       :conversations="conversations"
       :selectedConversationId="currentConversationId"
-      @select-conversation="selectConversation"
+      @conversation-client-info="selectConversation"
     />
-    <ConversationView 
+    <ConversationView
       :messages="currentConversation"
+      :selectedConversationId="currentConversationId"
+      :conversationInfo="currentConversationInfo"
+      :isLoading="isDialoguesLoading"
+      :audioSrc="currentAudioSrc"
     />
   </div>
 </template>
@@ -94,5 +100,23 @@ body {
 .chat-app {
   display: flex;
   height: 100vh;
+  overflow: hidden;
+}
+
+html {
+  overflow: hidden;
+}
+
+.chat-app > * {
+  flex-shrink: 0;
+}
+
+.chat-app > :first-child {
+  width: 300px;
+}
+
+.chat-app > :last-child {
+  flex-grow: 1;
+  overflow: auto;
 }
 </style>

@@ -1,61 +1,142 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
-import PerfectScrollbar from 'perfect-scrollbar'
-import 'perfect-scrollbar/css/perfect-scrollbar.css'
+import { onMounted, ref, watch, computed } from "vue";
+import PerfectScrollbar from "perfect-scrollbar";
+import "perfect-scrollbar/css/perfect-scrollbar.css";
 
 interface Conversation {
   id: string;
   title: string;
-  date: string; // Add this line
+  date: string;
 }
 
 const props = defineProps<{
-  conversations: Conversation[]
-  selectedConversationId: string | null
-}>()
+  conversations: Conversation[];
+  selectedConversationId: string | null;
+}>();
 
-const emit = defineEmits(['select-conversation'])
+const emit = defineEmits(["conversation-client-info"]);
 
-const conversationListRef = ref<HTMLElement | null>(null)
-let ps: PerfectScrollbar | null = null
+const conversationListRef = ref<HTMLElement | null>(null);
+let ps: PerfectScrollbar | null = null;
+
+const groupedConversations = computed(() => {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const groups: Record<string, Conversation[]> = {
+    "Aujourd'hui": [],
+    Hier: [],
+    "7 derniers jours": [],
+  };
+
+  props.conversations.sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+
+  for (const conv of props.conversations.slice(0, 30)) {
+    const convDate = new Date(conv.date);
+    if (convDate >= today) {
+      groups["Aujourd'hui"].push(conv);
+    } else if (convDate >= yesterday) {
+      groups["Hier"].push(conv);
+    } else if (convDate >= sevenDaysAgo) {
+      groups["7 derniers jours"].push(conv);
+    }
+  }
+
+  return groups;
+});
+
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date >= today) {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } else if (date >= yesterday) {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } else {
+    return date.toLocaleDateString();
+  }
+};
 
 onMounted(() => {
   if (conversationListRef.value) {
-    ps = new PerfectScrollbar(conversationListRef.value)
+    ps = new PerfectScrollbar(conversationListRef.value, {
+      suppressScrollX: true,
+      maxScrollbarLength: 200,
+    });
   }
-})
+});
 
-watch(() => props.conversations, () => {
-  if (ps) {
-    setTimeout(() => {
-      ps.update()
-    }, 0)
-  }
-}, { deep: true })
+watch(
+  () => groupedConversations.value,
+  () => {
+    if (ps) {
+      setTimeout(() => {
+        ps?.update();
+      }, 0);
+    }
+  },
+  { deep: true }
+);
+
+watch(
+  () => props.conversations,
+  () => {
+    if (ps) {
+      setTimeout(() => {
+        ps?.update();
+      }, 0);
+    }
+  },
+  { deep: true }
+);
 </script>
 
 <template>
   <div class="conversation-history">
-    <h2>Conversation History</h2>
+    <h2>Historique des conversations</h2>
     <div class="conversation-list" ref="conversationListRef">
-      <div 
-        v-for="conversation in conversations" 
-        :key="conversation.id"
-        :class="['conversation-item', { 'selected': conversation.id === selectedConversationId }]"
-        @click="emit('select-conversation', conversation.id)"
+      <template
+        v-for="(conversations, label) in groupedConversations"
+        :key="label"
       >
-        <div class="conversation-title">{{ conversation.title }}</div>
-        <div class="conversation-date">{{ conversation.date }}</div>
-      </div>
+        <div v-if="conversations.length" class="group-label">{{ label }}</div>
+        <div
+          v-for="conversation in conversations"
+          :key="conversation.id"
+          :class="[
+            'conversation-item',
+            { selected: conversation.id === selectedConversationId },
+          ]"
+          @click="emit('conversation-client-info', conversation.id)"
+        >
+          <div class="conversation-title">{{ conversation.title }}</div>
+          <div class="conversation-date">
+            {{ formatDate(conversation.date) }}
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>
 
 <style scoped>
 .conversation-history {
-  width: 250px;
+  width: 300px;
   background-color: #fff;
   border-right: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
 }
 
 h2 {
@@ -67,8 +148,16 @@ h2 {
 }
 
 .conversation-list {
-  height: calc(100vh - 59px); /* Adjusted to account for the h2 height */
+  flex-grow: 1;
   overflow-y: auto;
+  position: relative;
+}
+
+.group-label {
+  padding: 10px 20px;
+  font-weight: bold;
+  background-color: #f0f2f5;
+  border-bottom: 1px solid #e0e0e0;
 }
 
 .conversation-item {
