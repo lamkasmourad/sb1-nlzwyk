@@ -14,7 +14,6 @@ interface ConversationInfo {
   [key: string]: string | undefined;
 }
 
-
 const props = defineProps<{
   conversationInfo: ConversationInfo;
   selectedConversationId: string | null;
@@ -32,6 +31,7 @@ const audioElement = ref<HTMLAudioElement | null>(null);
 const isPlaying = ref(false);
 const currentTime = ref(0);
 const duration = ref(0);
+const callID = ref<string>("");
 
 const formattedCurrentTime = computed(() => {
   return formatTime(currentTime.value);
@@ -89,12 +89,12 @@ function connectWebSocket() {
   socket.onmessage = (event) => {
     console.log("New message arrived");
     const data = JSON.parse(event.data);
-    console.log(data)
-    if (data.callId && data.message) {
-      console.log("push new message",data.message.content)
+    console.log(data);
+    if (data.callId && data.message && data.callId === callID.value) {
+      console.log("push new message", data.message.content);
       messages.value.push({
         id: data.callId,
-        role: data.message.role == 'user' ? 'client' : data.message.role,
+        role: data.message.role === 'user' ? 'client' : data.message.role,
         content: data.message.content
       });
       scrollToBottom();
@@ -126,7 +126,7 @@ onMounted(() => {
   window.addEventListener("message", (event) => {
     let data = event.data;
     if (data.action === 'create') {
-      console.log( data.action_detail);
+      callID.value = data.action_detail
       emit('newCall', data);
     }
   });
