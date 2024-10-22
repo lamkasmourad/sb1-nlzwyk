@@ -94,7 +94,7 @@ function connectWebSocket() {
       console.log("push new message",data.message.content)
       messages.value.push({
         id: data.callId,
-        role: data.message.role == 'user' ? 'assistant' : data.message.role,
+        role: data.message.role == 'user' ? 'client' : data.message.role,
         content: data.message.content
       });
       scrollToBottom();
