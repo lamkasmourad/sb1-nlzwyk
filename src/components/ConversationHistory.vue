@@ -105,26 +105,31 @@ watch(
   <div class="conversation-history">
     <h2>Historique des conversations</h2>
     <div class="conversation-list" ref="conversationListRef">
-      <template
-        v-for="(conversations, label) in groupedConversations"
-        :key="label"
-      >
-        <div v-if="conversations.length" class="group-label">{{ label }}</div>
-        <div
-          v-for="conversation in conversations"
-          :key="conversation.id"
-          :class="[
-            'conversation-item',
-            { selected: conversation.id === selectedConversationId },
-          ]"
-          @click="emit('conversation-client-info', conversation.id)"
+      <template v-if="Object.values(groupedConversations).some(group => group.length > 0)">
+        <template
+          v-for="(conversations, label) in groupedConversations"
+          :key="label"
         >
-          <div class="conversation-title">{{ conversation.title }}</div>
-          <div class="conversation-date">
-            {{ formatDate(conversation.date) }}
+          <div v-if="conversations.length" class="group-label">{{ label }}</div>
+          <div
+            v-for="conversation in conversations"
+            :key="conversation.id"
+            :class="[
+              'conversation-item',
+              { selected: conversation.id === selectedConversationId },
+            ]"
+            @click="emit('conversation-client-info', conversation.id)"
+          >
+            <div class="conversation-title">{{ conversation.title }}</div>
+            <div class="conversation-date">
+              {{ formatDate(conversation.date) }}
+            </div>
           </div>
-        </div>
+        </template>
       </template>
+      <div v-else class="no-history-message">
+        Aucun historique trouvé
+      </div>
     </div>
   </div>
 </template>
@@ -191,5 +196,11 @@ h2 {
   font-size: 0.8em;
   color: #888;
   white-space: nowrap;
+}
+
+.no-history-message {
+  padding: 20px;
+  text-align: center;
+  color: #888;
 }
 </style>
