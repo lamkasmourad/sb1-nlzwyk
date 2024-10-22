@@ -76,7 +76,7 @@ function formatTime(time: number): string {
 }
 
 let socket: WebSocket | null = null;
-const SOCKET_URL = 'ws://172.30.1.25:8077';
+const SOCKET_URL = import.meta.env.VITE_ENV === 'local' ? 'ws://172.30.1.25:8077' : 'wss://voice-assistant.teletech-int.info/ws';
 const RECONNECT_INTERVAL = 5000;
 
 function connectWebSocket() {
