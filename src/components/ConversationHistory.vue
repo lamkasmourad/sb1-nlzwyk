@@ -12,6 +12,8 @@ interface Conversation {
 const props = defineProps<{
   conversations: Conversation[];
   selectedConversationId: string | null;
+  isLoading: boolean;
+  error: string | null;
 }>();
 
 const emit = defineEmits(["conversation-client-info"]);
@@ -105,7 +107,13 @@ watch(
   <div class="conversation-history">
     <h2>Historique des conversations</h2>
     <div class="conversation-list" ref="conversationListRef">
-      <template v-if="Object.values(groupedConversations).some(group => group.length > 0)">
+      <div v-if="isLoading" class="loading-container">
+        <div class="loading-spinner"></div>
+      </div>
+      <div v-else-if="error" class="error-message">
+        {{ error }}
+      </div>
+      <template v-else-if="Object.values(groupedConversations).some(group => group.length > 0)">
         <template
           v-for="(conversations, label) in groupedConversations"
           :key="label"

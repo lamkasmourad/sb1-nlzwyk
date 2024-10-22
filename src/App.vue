@@ -20,6 +20,8 @@ const isDialoguesLoading = ref(false);
 const conversationTags = ref({});
 const currentAudioSrc = ref<string | undefined>(undefined);
 const isNewCall = ref(false);
+const isHistoryLoading = ref(false);
+const historyError = ref<string | null>(null);
 
 const currentConversationInfo = computed(() => {
   return conversationTags.value;
@@ -28,6 +30,8 @@ const currentConversationInfo = computed(() => {
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
 onMounted(async () => {
+  isHistoryLoading.value = true;
+  historyError.value = null;
   try {
     const response = await axios.post(
       `${apiBaseUrl}/api/simulation/recent-conversations`
@@ -35,6 +39,9 @@ onMounted(async () => {
     conversations.value = response.data;
   } catch (error) {
     console.error("Error fetching conversations:", error);
+    historyError.value = "Une erreur s'est produite lors du chargement de l'historique des conversations.";
+  } finally {
+    isHistoryLoading.value = false;
   }
 });
 
@@ -79,6 +86,8 @@ const handleNewCall = () => {
     <ConversationHistory
       :conversations="conversations"
       :selectedConversationId="currentConversationId"
+      :isLoading="isHistoryLoading"
+      :error="historyError"
       @conversation-client-info="selectConversation"
     />
     <ConversationView
