@@ -201,7 +201,7 @@ const setProgress = (event: MouseEvent) => {
     <div v-if="selectedConversationId && !props.newCall" class="header">
       <div class="audio-player">
         <button @click="togglePlay" class="play-button">
-          {{ isPlaying ? "❚❚" : "▶" }}
+          {{ isPlaying ? "❚❚" : " ▶" }}
         </button>
         <div class="progress-bar" @click="setProgress">
           <div
@@ -249,7 +249,7 @@ const setProgress = (event: MouseEvent) => {
             {{ message.content }}
           </template>
         </div>
-        <div v-if="props.newCall" class="message assistant">
+        <div v-if="props.newCall" :class="['message', messages.length % 2 === 0 ? 'assistant' : 'client']">
           <div class="loading-dots">...</div>
         </div>
       </template>
