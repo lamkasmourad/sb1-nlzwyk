@@ -14,18 +14,12 @@ interface Conversation {
   ref?: string;
 }
 
-interface Message {
-  id: string;
-  role: "assistant" | "client";
-  content: string;
-}
-
 const conversations = ref<Conversation[]>([]);
-const currentConversation = ref<Message[]>([]);
 const currentConversationId = ref<string | null>(null);
 const isDialoguesLoading = ref(false);
 const conversationTags = ref({});
 const currentAudioSrc = ref<string | undefined>(undefined);
+const isNewCall = ref(false);
 
 const currentConversationInfo = computed(() => {
   return conversationTags.value;
@@ -47,16 +41,11 @@ onMounted(async () => {
 const selectConversation = async (conversationId: string) => {
   currentConversationId.value = conversationId;
   isDialoguesLoading.value = true;
+  isNewCall.value = false;
   try {
-    const [dialoguesResponse, tagsResponse] = await Promise.all([
-      axios.post(`${apiBaseUrl}/api/simulation/dialogues-by-conversation`, {
-        conversation_id: conversationId,
-      }),
-      axios.post(`${apiBaseUrl}/api/simulation/conversation-client-info`, {
-        conversation_id: conversationId,
-      }),
-    ]);
-    currentConversation.value = dialoguesResponse.data;
+    const tagsResponse = await axios.post(`${apiBaseUrl}/api/simulation/conversation-client-info`, {
+      conversation_id: conversationId,
+    });
     conversationTags.value = tagsResponse.data;
     const selectedConversation = conversations.value.find(
       (conv) => conv.id === conversationId
@@ -64,12 +53,24 @@ const selectConversation = async (conversationId: string) => {
     currentAudioSrc.value = selectedConversation?.audio_path;
   } catch (error) {
     console.error("Error fetching data:", error);
-    currentConversation.value = [];
     conversationTags.value = {};
     currentAudioSrc.value = undefined;
   } finally {
     isDialoguesLoading.value = false;
   }
+};
+
+const handleNewCall = () => {
+  const newConversation: Conversation = {
+    id: Date.now().toString(),
+    title: "Nouvel appel",
+    date: new Date(Date.now() + 3600000).toISOString(),
+  };
+  conversations.value.unshift(newConversation);
+  currentConversationId.value = newConversation.id;
+  conversationTags.value = {};
+  currentAudioSrc.value = undefined;
+  isNewCall.value = true;
 };
 </script>
 
@@ -81,11 +82,12 @@ const selectConversation = async (conversationId: string) => {
       @conversation-client-info="selectConversation"
     />
     <ConversationView
-      :messages="currentConversation"
       :selectedConversationId="currentConversationId"
       :conversationInfo="currentConversationInfo"
       :isLoading="isDialoguesLoading"
       :audioSrc="currentAudioSrc"
+      :newCall="isNewCall"
+      @newCall="handleNewCall"
     />
   </div>
 </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref, watch, nextTick, computed } from "vue";
+import { onMounted, ref, watch, nextTick, computed, onUnmounted } from "vue";
+import axios from "axios";
 import PerfectScrollbar from "perfect-scrollbar";
 import "perfect-scrollbar/css/perfect-scrollbar.css";
 
@@ -13,14 +14,18 @@ interface ConversationInfo {
   [key: string]: string | undefined;
 }
 
+
 const props = defineProps<{
-  messages: Message[];
   conversationInfo: ConversationInfo;
   selectedConversationId: string | null;
   isLoading: boolean;
   audioSrc: string | undefined;
+  newCall: boolean | undefined;
 }>();
 
+const emit = defineEmits(['newCall']);
+
+const messages = ref<Message[]>([]);
 const messagesContainer = ref<HTMLElement | null>(null);
 let ps: PerfectScrollbar | null = null;
 const audioElement = ref<HTMLAudioElement | null>(null);
@@ -51,6 +56,14 @@ const filteredConversationInfo = computed(() => {
   return filtered;
 });
 
+const agentNumber = ref("1000");
+const agentSecret = ref("EcA+1000");
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
+const softphoneUrl = computed(() => {
+  return `https://softphone-assistant.teletech-int.info/?agentNumber=${encodeURIComponent(agentNumber.value)}&agentSecret=${encodeURIComponent(agentSecret.value)}`;
+});
+
 function formatTime(time: number): string {
   if (isNaN(time) || time === 0) {
     return "00:00";
@@ -60,6 +73,44 @@ function formatTime(time: number): string {
   return `${minutes.toString().padStart(2, "0")}:${seconds
     .toString()
     .padStart(2, "0")}`;
+}
+
+let socket: WebSocket | null = null;
+const SOCKET_URL = 'ws://172.30.1.25:8077';
+const RECONNECT_INTERVAL = 5000;
+
+function connectWebSocket() {
+  socket = new WebSocket(SOCKET_URL);
+
+  socket.onopen = () => {
+    console.log('WebSocket connected');
+  };
+
+  socket.onmessage = (event) => {
+    console.log("New message arrived");
+    const data = JSON.parse(event.data);
+    console.log(data)
+    if (data.callId && data.message) {
+      console.log("push new message",data.message.content)
+      messages.value.push({
+        id: data.callId,
+        role: data.message.role,
+        content: data.message.content
+      });
+      scrollToBottom();
+    }
+  };
+
+  socket.onclose = (event) => {
+    console.log('WebSocket disconnected:', event.reason);
+    socket = null;
+    setTimeout(connectWebSocket, RECONNECT_INTERVAL);
+  };
+
+  socket.onerror = (error) => {
+    console.error('WebSocket error:', error);
+    socket?.close();
+  };
 }
 
 onMounted(() => {
@@ -72,6 +123,19 @@ onMounted(() => {
       duration.value = audioElement.value?.duration || 0;
     });
   }
+  window.addEventListener("message", (event) => {
+    let data = event.data;
+    if (data.action === 'create') {
+      console.log( data.action_detail);
+      emit('newCall', data);
+    }
+  });
+
+  connectWebSocket();
+});
+
+onUnmounted(() => {
+  socket?.close();
 });
 
 const scrollToBottom = () => {
@@ -86,31 +150,19 @@ const scrollToBottom = () => {
 };
 
 watch(
-  () => props.messages,
-  (newMessages, oldMessages) => {
-    if (newMessages.length > oldMessages.length) {
-      setTimeout(() => {
-        scrollToBottom();
-      }, 100);
-    }
-  },
-  { deep: true }
-);
-
-watch(
-  () => props.messages,
-  () => {
-    nextTick(() => {
-      scrollToBottom();
-    });
-  },
-  { deep: true }
-);
-
-watch(
   () => props.selectedConversationId,
-  (newConversationId) => {
-    console.log("Selected conversation changed:", newConversationId);
+  async (newConversationId) => {
+    if (newConversationId) {
+      try {
+        const response = await axios.post(`${apiBaseUrl}/api/simulation/dialogues-by-conversation`, {
+          conversation_id: newConversationId,
+        });
+        messages.value = response.data;
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+        messages.value = [];
+      }
+    }
   }
 );
 
@@ -146,7 +198,7 @@ const setProgress = (event: MouseEvent) => {
 
 <template>
   <div class="conversation-view">
-    <div v-if="selectedConversationId" class="header">
+    <div v-if="selectedConversationId && !props.newCall" class="header">
       <div class="audio-player">
         <button @click="togglePlay" class="play-button">
           {{ isPlaying ? "❚❚" : "▶" }}
@@ -183,13 +235,12 @@ const setProgress = (event: MouseEvent) => {
       </div>
       <template v-else>
         <div
-          v-if="selectedConversationId && messages.length === 0"
+          v-if="selectedConversationId && messages.length === 0 && !props.newCall"
           class="no-messages"
         >
           Aucune conversation entre l'assistant et le client n'a été trouvée
         </div>
         <div
-          v-else
           v-for="message in messages"
           :key="message.id"
           :class="['message', message.role]"
@@ -198,8 +249,12 @@ const setProgress = (event: MouseEvent) => {
             {{ message.content }}
           </template>
         </div>
+        <div v-if="props.newCall" class="message assistant">
+          <div class="loading-dots">...</div>
+        </div>
       </template>
     </div>
+    <iframe :src="softphoneUrl" class="softphone-iframe" allow="microphone"></iframe>
   </div>
 </template>
 
@@ -333,6 +388,12 @@ const setProgress = (event: MouseEvent) => {
   text-align: center;
 }
 
+.softphone-iframe {
+  width: 100%;
+  height: 300px;
+  border: none;
+}
+
 @keyframes spin {
   0% {
     transform: rotate(0deg);
@@ -340,5 +401,15 @@ const setProgress = (event: MouseEvent) => {
   100% {
     transform: rotate(360deg);
   }
+}
+
+.loading-dots {
+  font-size: 24px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
 }
 </style>
