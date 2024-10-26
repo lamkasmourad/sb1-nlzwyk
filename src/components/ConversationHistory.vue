@@ -113,7 +113,11 @@ watch(
       <div v-else-if="error" class="error-message">
         {{ error }}
       </div>
-      <template v-else-if="Object.values(groupedConversations).some(group => group.length > 0)">
+      <template
+        v-else-if="
+          Object.values(groupedConversations).some((group) => group.length > 0)
+        "
+      >
         <template
           v-for="(conversations, label) in groupedConversations"
           :key="label"
@@ -135,9 +139,7 @@ watch(
           </div>
         </template>
       </template>
-      <div v-else class="no-history-message">
-        Aucun historique trouvé
-      </div>
+      <div v-else class="no-history-message">Aucun historique trouvé</div>
     </div>
   </div>
 </template>
@@ -168,8 +170,12 @@ watch(
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 h2 {

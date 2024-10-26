@@ -39,7 +39,8 @@ onMounted(async () => {
     conversations.value = response.data;
   } catch (error) {
     console.error("Error fetching conversations:", error);
-    historyError.value = "Une erreur s'est produite lors du chargement de l'historique des conversations.";
+    historyError.value =
+      "Une erreur s'est produite lors du chargement de l'historique des conversations.";
   } finally {
     isHistoryLoading.value = false;
   }
@@ -50,9 +51,12 @@ const selectConversation = async (conversationId: string) => {
   isDialoguesLoading.value = true;
   isNewCall.value = false;
   try {
-    const tagsResponse = await axios.post(`${apiBaseUrl}/api/simulation/conversation-client-info`, {
-      conversation_id: conversationId,
-    });
+    const tagsResponse = await axios.post(
+      `${apiBaseUrl}/api/simulation/conversation-client-info`,
+      {
+        conversation_id: conversationId,
+      }
+    );
     conversationTags.value = tagsResponse.data;
     const selectedConversation = conversations.value.find(
       (conv) => conv.id === conversationId
@@ -104,7 +108,8 @@ const handleNewCall = () => {
 <style>
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
   background-color: #f0f2f5;
 }
 

@@ -22,7 +22,7 @@ const props = defineProps<{
   newCall: boolean | undefined;
 }>();
 
-const emit = defineEmits(['newCall']);
+const emit = defineEmits(["newCall"]);
 
 const messages = ref<Message[]>([]);
 const messagesContainer = ref<HTMLElement | null>(null);
@@ -32,6 +32,20 @@ const isPlaying = ref(false);
 const currentTime = ref(0);
 const duration = ref(0);
 const callID = ref<string>("");
+
+function getTagColor(value: string): string {
+  value = value.toLowerCase();
+  switch (value) {
+    case "raccroché":
+      return "tag-red";
+    case "traité":
+      return "tag-green";
+    case "transféré":
+      return "tag-orange";
+    default:
+      return "";
+  }
+}
 
 const formattedCurrentTime = computed(() => {
   return formatTime(currentTime.value);
@@ -61,7 +75,9 @@ const agentSecret = ref("EcA+1000");
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
 const softphoneUrl = computed(() => {
-  return `https://softphone-assistant.teletech-int.info/?agentNumber=${encodeURIComponent(agentNumber.value)}&agentSecret=${encodeURIComponent(agentSecret.value)}`;
+  return `https://softphone-assistant.teletech-int.info/?agentNumber=${encodeURIComponent(
+    agentNumber.value
+  )}&agentSecret=${encodeURIComponent(agentSecret.value)}`;
 });
 
 function formatTime(time: number): string {
@@ -76,41 +92,75 @@ function formatTime(time: number): string {
 }
 
 let socket: WebSocket | null = null;
-const SOCKET_URL = import.meta.env.VITE_ENV === 'local' ? 'ws://172.30.1.25:8077' : 'wss://voice-assistant.teletech-int.info/ws';
-const RECONNECT_INTERVAL = 5000;
+let currentChannel: string | null = null;
+
+const SOCKET_URL =
+  import.meta.env.VITE_ENV === "local"
+    ? "ws://172.30.1.25:8077"
+    : "wss://voice-assistant.teletech-int.info/ws";
+//const RECONNECT_INTERVAL = 5000;
 
 function connectWebSocket() {
-  socket = new WebSocket(SOCKET_URL);
+  return new Promise<void>((resolve, reject) => {
+    socket = new WebSocket(SOCKET_URL);
 
-  socket.onopen = () => {
-    console.log('WebSocket connected');
-  };
+    socket.onopen = () => {
+      console.log("Connected to the server");
+      resolve();
+    };
 
-  socket.onmessage = (event) => {
-    console.log("New message arrived");
-    const data = JSON.parse(event.data);
-    console.log(data);
-    if (data.callId && data.message && data.callId === callID.value) {
-      console.log("push new message", data.message.content);
-      messages.value.push({
-        id: data.callId,
-        role: data.message.role === 'user' ? 'client' : data.message.role,
-        content: data.message.content
-      });
+    socket.onmessage = (event) => {
+      console.log("Received message:", event.data);
+      const data = JSON.parse(event.data);
+
+      // Check if the last message exists and is from the user
+      const lastMessage = messages.value[messages.value.length - 1];
+      if (
+        lastMessage &&
+        data.role === "user" &&
+        lastMessage.role === "client" &&
+        data.role !== "assistant" // Add check to prevent modifying when assistant message arrives
+      ) {
+        // Update the existing message content
+        lastMessage.content = data.content;
+      } else {
+        // Add new message with auto-incrementing ID
+        const newMessageId =
+          messages.value.length > 0
+            ? String(Number(messages.value[messages.value.length - 1].id) + 1)
+            : "1";
+
+        messages.value.push({
+          id: newMessageId,
+          role: data.role === "user" ? "client" : data.role,
+          content: data.content,
+        });
+      }
       scrollToBottom();
-    }
-  };
+    };
+    socket.onclose = () => {
+      console.log("Disconnected from the server");
+    };
 
-  socket.onclose = (event) => {
-    console.log('WebSocket disconnected:', event.reason);
-    socket = null;
-    setTimeout(connectWebSocket, RECONNECT_INTERVAL);
-  };
+    socket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      reject(error);
+    };
+  });
+}
+function joinChannel(channelId: string) {
+  currentChannel = channelId;
+  sendMessage("join");
+}
 
-  socket.onerror = (error) => {
-    console.error('WebSocket error:', error);
-    socket?.close();
-  };
+function sendMessage(type: string, message: any = "") {
+  const data = { message: message, channel: currentChannel };
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    const message = JSON.stringify({ type, data });
+    socket.send(message);
+  } else {
+    console.error("Socket is not open. Cannot send message.");
+  }
 }
 
 onMounted(() => {
@@ -125,13 +175,20 @@ onMounted(() => {
   }
   window.addEventListener("message", (event) => {
     let data = event.data;
-    if (data.action === 'create') {
-      callID.value = data.action_detail
-      emit('newCall', data);
+    if (data.action === "create") {
+      // If there's an existing channel, leave it before joining the new one
+      if (currentChannel) {
+        sendMessage("leave");
+      }
+
+      callID.value = data.action_detail;
+      emit("newCall", data);
+      connectWebSocket().then(() => {
+        console.log("connected now join channel", callID.value);
+        joinChannel(callID.value);
+      });
     }
   });
-
-  connectWebSocket();
 });
 
 onUnmounted(() => {
@@ -154,9 +211,12 @@ watch(
   async (newConversationId) => {
     if (newConversationId) {
       try {
-        const response = await axios.post(`${apiBaseUrl}/api/simulation/dialogues-by-conversation`, {
-          conversation_id: newConversationId,
-        });
+        const response = await axios.post(
+          `${apiBaseUrl}/api/simulation/dialogues-by-conversation`,
+          {
+            conversation_id: newConversationId,
+          }
+        );
         messages.value = response.data;
       } catch (error) {
         console.error("Error fetching messages:", error);
@@ -225,7 +285,23 @@ const setProgress = (event: MouseEvent) => {
           :key="key"
           class="tag"
         >
-          {{ key.charAt(0).toUpperCase() + key.slice(1) }}: {{ value }}
+          <span style="font-weight: bold">
+            {{
+              key.replace(/_/g, " ").charAt(0).toUpperCase() +
+              key.replace(/_/g, " ").slice(1)
+            }}</span
+          >
+          <span
+            style="
+              display: inline-block;
+              width: 1px;
+              height: 100%;
+              background-color: #ccc;
+              margin: 0 8px;
+              vertical-align: middle;
+            "
+          ></span>
+          <span :class="[getTagColor(value)]">{{ value }}</span>
         </span>
       </div>
     </div>
@@ -235,7 +311,9 @@ const setProgress = (event: MouseEvent) => {
       </div>
       <template v-else>
         <div
-          v-if="selectedConversationId && messages.length === 0 && !props.newCall"
+          v-if="
+            selectedConversationId && messages.length === 0 && !props.newCall
+          "
           class="no-messages"
         >
           Aucune conversation entre l'assistant et le client n'a été trouvée
@@ -249,16 +327,39 @@ const setProgress = (event: MouseEvent) => {
             {{ message.content }}
           </template>
         </div>
-        <div v-if="props.newCall" :class="['message', messages.length % 2 === 0 ? 'assistant' : 'client']">
+        <div
+          v-if="props.newCall"
+          :class="[
+            'message',
+            messages.length % 2 === 0 ? 'assistant' : 'client',
+          ]"
+        >
           <div class="loading-dots">...</div>
         </div>
       </template>
     </div>
-    <iframe :src="softphoneUrl" class="softphone-iframe" allow="microphone"></iframe>
+    <iframe
+      :src="softphoneUrl"
+      name="softphone"
+      class="softphone-iframe"
+      allow="microphone"
+    ></iframe>
   </div>
 </template>
 
 <style scoped>
+.tag-red {
+  color: red;
+}
+
+.tag-green {
+  color: green;
+}
+
+.tag-orange {
+  color: orange;
+}
+
 .conversation-view {
   flex-grow: 1;
   display: flex;
@@ -409,7 +510,12 @@ const setProgress = (event: MouseEvent) => {
 }
 
 @keyframes blink {
-  0%, 100% { opacity: 0; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 </style>
